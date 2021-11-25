@@ -9,30 +9,28 @@ class Params {
     static get TwoPi() { return Math.PI * 2; }
     static get WindowWidth() { return 1400; }
     static get WindowHeight() { return 640; }
-    static get MaxDistance() { return Math.sqrt(Math.pow(Params.WindowWidth, 2) + Math.pow(Params.WindowHeight, 2)); }
-    static get NumInputs() { return 5; }
+    static get NumInputs() { return 6; }
     static get NumOutputs() { return 2; }
     static get ActivationResponse() { return 1; }
     static get Bias() { return 0; }
 
-    static get MaxTurnRate() { return 0.3; }
-    static get MaxSpeed() { return 2; }
+    static get MaxTurnRate() { return 0.5; }
+    static get MaxSpeed() { return 3; }
     static get SweeperScale() { return 5; }
     static get MineScale() { return 2; }
 
-    static get NumHidden() { return 1; }
-    static get NeuronsPerHiddenLayer() { return 150; }
-
-    static get NumMines() { return 130; }
-    static get NumSweepers() { return 20; }
-    static get MineSenseDistance() { return Math.pow(300, 2); }
-    static get MineSenseRadius() { return Math.pow(15, 2); }
-
+    static get NumHidden() { return 2; }
+    static get NeuronsPerHiddenLayer() { return 73; }
     static get NumTicks() { return 5000; }
+
+    static get NumMines() { return 100; }
+    static get NumSweepers() { return 30; }
+    static get MineSenseDistance() { return Math.pow(350, 2); }
+    static get MineSenseRadius() { return Math.pow(15, 2); }
 
     static get CrossoverRate() { return 0.7; }
     static get MutationRate() { return 0.01; }
-    static get MaxPerturbation() { return 0.025; }
+    static get MaxPerturbation() { return 0.9; }
     static get NumElite() { return (~~(Params.NumSweepers * 0.2) & 0xFE) - 1; }
     static get NumCopiesElite() { return 1; }
 }
@@ -300,19 +298,23 @@ class Minesweeper {
 
         //get vector to closest mine
         let deltaVector = this.GetClosestMine(mines);
-        let deltaVectorLength = deltaVector.Length / Params.MaxDistance;
 
         //normalise it
         deltaVector.Normalize();
 
+        // add current rotation and speed
+        inputs.push(this.rotation / Params.TwoPi);
+        inputs.push(this.speed / Params.MaxSpeed);
+
         //add in vector to closest mine
         inputs.push(deltaVector.x);
         inputs.push(deltaVector.y);
-        inputs.push(deltaVectorLength);
 
         // Add in sweepers look at vector
-        inputs.push(this.lookAt.x || 0.001);
-        inputs.push(this.lookAt.y || 0.001);
+        let lookAtVector = new Vector2D(this.lookAt);
+        lookAtVector.Normalize();
+        inputs.push(lookAtVector.x || 0.001);
+        inputs.push(lookAtVector.y || 0.001);
 
     
         //update the brain and get feedback
@@ -342,6 +344,7 @@ class Minesweeper {
         this.rotation %= Params.TwoPi;
         
         this.speed = (this.lTrack + this.rTrack);
+        this.speed = this.speed < Params.MaxSpeed ? this.speed : Params.MaxSpeed;
 
         //update Look At 
         this.lookAt.x = -Math.sin(this.rotation);
