@@ -20,7 +20,7 @@ class Params {
     static get MineScale() { return 2; }
 
     static get NumHidden() { return 2; }
-    static get NeuronsPerHiddenLayer() { return 73; }
+    static get NeuronsPerHiddenLayer() { return 100; }
     static get NumTicks() { return 5000; }
 
     static get NumMines() { return 100; }
@@ -303,12 +303,12 @@ class Minesweeper {
         deltaVector.Normalize();
 
         // add current rotation and speed
-        inputs.push(this.rotation / Params.TwoPi);
-        inputs.push(this.speed / Params.MaxSpeed);
+        inputs.push((this.rotation || 0.001) / Params.TwoPi);
+        inputs.push((this.speed || 0.001) / Params.MaxSpeed);
 
         //add in vector to closest mine
-        inputs.push(deltaVector.x);
-        inputs.push(deltaVector.y);
+        inputs.push(deltaVector.x || 0.001);
+        inputs.push(deltaVector.y || 0.001);
 
         // Add in sweepers look at vector
         let lookAtVector = new Vector2D(this.lookAt);
