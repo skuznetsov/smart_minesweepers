@@ -457,7 +457,7 @@ class Controller {
         }
     }
 
-    saveState(name) {
+    saveState(name, showAlert) {
         let copy = JSON.parse(JSON.stringify(this));
         for(let sweeper of copy.sweepers) {
             delete sweeper.brain.layers;
@@ -468,7 +468,9 @@ class Controller {
 
         let json = JSON.stringify(copy);
         localStorage.setItem(name, json);
-        alert("State is saved");
+        if (showAlert) {
+            alert("Custom state is saved");
+        }
     }
 
     loadState(name, showAlert) {
@@ -521,7 +523,7 @@ class Controller {
 
         }
         if (showAlert) {
-            alert("State is loaded");
+            alert("Custom state is loaded");
         }
     }
 
@@ -1173,13 +1175,17 @@ function main() {
     if (controller.fastRender) {
         controller.FastUpdate();
         controller.Render();
+        if (!controller.Idle) {
+            controller.saveState("default");
+        }
     } else {
         if (controller.Idle) {
             controller.Update();
             controller.Render();
+        } else {
+            controller.saveState("default");
         }
     }
-    controller.saveState("default");
     raf = window.requestAnimationFrame(main);
 }
 
@@ -1189,7 +1195,7 @@ document.addEventListener('keyup', key => {
             controller.fastRender = !controller.fastRender;
             break;
         case "KeyS":
-            controller.saveState("custom");
+            controller.saveState("custom", true);
             break;
         case "KeyP":
             controller.Idle = !controller.Idle;
