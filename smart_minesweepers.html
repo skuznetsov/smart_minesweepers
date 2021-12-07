@@ -19,7 +19,7 @@ class Params {
     static get SweeperScale() { return 5; }
     static get MineScale() { return 2; }
 
-    static get NumHidden() { return 2; }
+    static get NumHidden() { return 1; }
     static get NeuronsPerHiddenLayer() { return 100; }
     static get NumTicks() { return 5000; }
 
@@ -447,14 +447,81 @@ class Controller {
         //Get the weights from the GA and insert into the sweepers brains
         this.thePopulation = this.GA.Chromos;
 
-        for (let i = 0; i < this.numSweepers; i++)
-        
+        for (let i = 0; i < this.numSweepers; i++) {
             this.sweepers[i].Weights = this.thePopulation[i].weights;
+        }
 
         //initialize mines in random positions within the application window
-        for (let i = 0; i < this.numMines; ++i)
-        {
+        for (let i = 0; i < this.numMines; ++i) {
             this.mines.push(new Vector2D(RandInt(0, this.xClient), RandInt(0, this.yClient)));
+        }
+    }
+
+    saveState(name) {
+        let copy = JSON.parse(JSON.stringify(this));
+        for(let sweeper of copy.sweepers) {
+            delete sweeper.brain.layers;
+        }
+        delete copy.GA.pop;
+        delete copy.canvas;
+        delete copy.renderContext;
+
+        let json = JSON.stringify(copy);
+        localStorage.setItem(name, json);
+        alert("State is saved");
+    }
+
+    loadState(name, showAlert) {
+        let json = localStorage.getItem(name);
+        if (json) {
+            let data = JSON.parse(json);
+            Object.assign(this, data);
+            this.GA = new GenAlg(0);
+            Object.assign(this.GA, data.GA);
+            let pop = [];
+            for (let genome of data.thePopulation) {
+                pop.push(new Genome(genome.weights, genome.fitness));
+            }
+            this.thePopulation = pop;
+            this.GA.pop = pop;
+
+            //let's restore the mine sweepers
+            this.sweepers = [];
+            for (let i=0; i<this.numSweepers; ++i)
+            {
+                this.sweepers.push(new Minesweeper());
+                Object.assign(this.sweepers[i],data.sweepers[i]);
+                
+                let brain = new NeuralNet();
+                let oldBrain = data.sweepers[i].brain;
+                brain.numInputs	            = oldBrain.numInputs;
+                brain.numOutputs		    = oldBrain.numOutputs;
+                brain.numHiddenLayers	    = oldBrain.numHiddenLayers;
+                brain.neuronsPerHiddenLayer = oldBrain.neuronsPerHiddenLayer;
+                brain.layers = [];
+                this.sweepers[i].brain = brain;
+                this.sweepers[i].brain.CreateNet();
+
+                Object.assign(this.sweepers[i], {
+                    lookAt: new Vector2D(data.sweepers[i].lookAt.x, data.sweepers[i].lookAt.y),
+                    position: new Vector2D(data.sweepers[i].position.x, data.sweepers[i].position.y)
+                });
+            }
+
+            for (let i = 0; i < this.numSweepers; i++) {
+                this.sweepers[i].Weights = this.thePopulation[i].weights;
+            }
+
+            //initialize mines in random positions within the application window
+            this.mines = [];
+            for (let i = 0; i < this.numMines; ++i)
+            {
+                this.mines.push(new Vector2D(data.mines[i].x,data.mines[i].y));
+            }
+
+        }
+        if (showAlert) {
+            alert("State is loaded");
         }
     }
 
@@ -1096,7 +1163,13 @@ class GenAlg {
 
 let controller = new Controller();
 
+let initialFlag = true;
 function main() {
+    if (initialFlag) {
+        controller.loadState("default");
+        initialFlag = false;
+    }
+
     if (controller.fastRender) {
         controller.FastUpdate();
         controller.Render();
@@ -1106,12 +1179,24 @@ function main() {
             controller.Render();
         }
     }
+    controller.saveState("default");
     raf = window.requestAnimationFrame(main);
 }
 
 document.addEventListener('keyup', key => {
-    if (key.code == "Space") {
-        controller.fastRender = !controller.fastRender;
+    switch (key.code) {
+        case "Space":
+            controller.fastRender = !controller.fastRender;
+            break;
+        case "KeyS":
+            controller.saveState("custom");
+            break;
+        case "KeyP":
+            controller.Idle = !controller.Idle;
+        case "KeyL":
+            controller.loadState("custom", true);
+        default:
+            break;
     }
 });
 
