@@ -948,7 +948,7 @@ class NeuralNet {
     }
 
     static Sigmoid(netinput, response) {
-	    return ( 1 / ( 1 + Math.exp(-netinput / response)));
+	    return ( 1 / ( 1 + Math.exp(-netinput / response))) * 2.0 - 1.0;
     }
 }
 
