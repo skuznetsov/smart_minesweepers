@@ -14,13 +14,14 @@ class Params {
     static get ActivationResponse() { return 1; }
     static get Bias() { return 0; }
 
-    static get MaxTurnRate() { return 0.5; }
-    static get MaxSpeed() { return 3; }
+    static get MaxTurnRate() { return 0.13; }
+    static get MaxForwardSpeed() { return 1.75; }
+    static get MaxBackwardSpeed() { return -1.25; }
     static get SweeperScale() { return 5; }
     static get MineScale() { return 2; }
 
-    static get NumHidden() { return 1; }
-    static get NeuronsPerHiddenLayer() { return 100; }
+    static get NumHidden() { return 3; }
+    static get NeuronsPerHiddenLayer() { return 30; }
     static get NumTicks() { return 5000; }
 
     static get NumMines() { return 30; }
@@ -31,7 +32,7 @@ class Params {
     static get CrossoverRate() { return 0.7; }
     static get MutationRate() { return 0.01; }
     static get MaxPerturbation() { return 0.9; }
-    static get NumElite() { return (~~(Params.NumSweepers * 0.2) & 0xFE) - 1; }
+    static get NumElite() { return (~~(Params.NumSweepers * 0.2) & 0xFE); }
     static get NumCopiesElite() { return 1; }
 }
 
@@ -304,7 +305,9 @@ class Minesweeper {
 
         // add current rotation and speed
         inputs.push((this.rotation || 0.001) / Params.TwoPi);
-        inputs.push((this.speed || 0.001) / Params.MaxSpeed);
+
+        let normalizedSpeed = this.speed > 0 ? this.speed / Params.MaxForwardSpeed : -this.speed / Params.MaxBackwardSpeed;
+        inputs.push(normalizedSpeed || 0.001);
 
         //add in vector to closest mine
         inputs.push(deltaVector.x || 0.001);
@@ -344,7 +347,7 @@ class Minesweeper {
         this.rotation %= Params.TwoPi;
         
         this.speed = (this.lTrack + this.rTrack);
-        this.speed = this.speed < Params.MaxSpeed ? this.speed : Params.MaxSpeed;
+        this.speed = Clamp(this.speed, Params.MaxBackwardSpeed, Params.MaxForwardSpeed);
 
         //update Look At 
         this.lookAt.x = -Math.sin(this.rotation);
@@ -477,50 +480,56 @@ class Controller {
         let json = localStorage.getItem(name);
         if (json) {
             let data = JSON.parse(json);
-            Object.assign(this, data);
-            this.GA = new GenAlg(0);
-            Object.assign(this.GA, data.GA);
-            let pop = [];
-            for (let genome of data.thePopulation) {
-                pop.push(new Genome(genome.weights, genome.fitness));
-            }
-            this.thePopulation = pop;
-            this.GA.pop = pop;
-
-            //let's restore the mine sweepers
-            this.sweepers = [];
-            for (let i=0; i<this.numSweepers; ++i)
-            {
-                this.sweepers.push(new Minesweeper());
-                Object.assign(this.sweepers[i],data.sweepers[i]);
+            if (data.sweepers && data.sweepers.length > 0 && 
+                data.sweepers[0].brain.neuronsPerHiddenLayer == Params.NeuronsPerHiddenLayer &&
+                data.sweepers[0].brain.numHiddenLayers == Params.NumHidden) {
+                Object.assign(this, data);
+                this.Idle = true;
+                this.GA = new GenAlg(0);
+                Object.assign(this.GA, data.GA);
+                let pop = [];
+                for (let genome of data.thePopulation) {
+                    pop.push(new Genome(genome.weights, genome.fitness));
+                }
                 
-                let brain = new NeuralNet();
-                let oldBrain = data.sweepers[i].brain;
-                brain.numInputs	            = oldBrain.numInputs;
-                brain.numOutputs		    = oldBrain.numOutputs;
-                brain.numHiddenLayers	    = oldBrain.numHiddenLayers;
-                brain.neuronsPerHiddenLayer = oldBrain.neuronsPerHiddenLayer;
-                brain.layers = [];
-                this.sweepers[i].brain = brain;
-                this.sweepers[i].brain.CreateNet();
+                this.thePopulation = pop;
+                this.GA.pop = pop;
+                this.GA.bestEverGenome = new Genome(data.GA.bestEverGenome.weights, data.GA.bestEverGenome.fitness);
 
-                Object.assign(this.sweepers[i], {
-                    lookAt: new Vector2D(data.sweepers[i].lookAt.x, data.sweepers[i].lookAt.y),
-                    position: new Vector2D(data.sweepers[i].position.x, data.sweepers[i].position.y)
-                });
+                //let's restore the mine sweepers
+                this.sweepers = [];
+                for (let i=0; i<this.numSweepers; ++i)
+                {
+                    this.sweepers.push(new Minesweeper());
+                    Object.assign(this.sweepers[i],data.sweepers[i]);
+                    
+                    let brain = new NeuralNet();
+                    let oldBrain = data.sweepers[i].brain;
+                    brain.numInputs	            = oldBrain.numInputs;
+                    brain.numOutputs		    = oldBrain.numOutputs;
+                    brain.numHiddenLayers	    = oldBrain.numHiddenLayers;
+                    brain.neuronsPerHiddenLayer = oldBrain.neuronsPerHiddenLayer;
+                    brain.layers = [];
+                    this.sweepers[i].brain = brain;
+                    this.sweepers[i].brain.CreateNet();
+
+                    Object.assign(this.sweepers[i], {
+                        lookAt: new Vector2D(data.sweepers[i].lookAt.x, data.sweepers[i].lookAt.y),
+                        position: new Vector2D(data.sweepers[i].position.x, data.sweepers[i].position.y)
+                    });
+                }
+
+                for (let i = 0; i < this.numSweepers; i++) {
+                    this.sweepers[i].Weights = this.thePopulation[i].weights;
+                }
+
+                //initialize mines in random positions within the application window
+                this.mines = [];
+                for (let i = 0; i < this.numMines; ++i)
+                {
+                    this.mines.push(new Vector2D(data.mines[i].x,data.mines[i].y));
+                }
             }
-
-            for (let i = 0; i < this.numSweepers; i++) {
-                this.sweepers[i].Weights = this.thePopulation[i].weights;
-            }
-
-            //initialize mines in random positions within the application window
-            this.mines = [];
-            for (let i = 0; i < this.numMines; ++i)
-            {
-                this.mines.push(new Vector2D(data.mines[i].x,data.mines[i].y));
-            }
-
         }
         if (showAlert) {
             alert("Custom state is loaded");
@@ -1107,10 +1116,12 @@ class GenAlg {
         //to the supplied vector
         if (this.bestEverGenome) {
             pop.push(this.bestEverGenome);
+            nBest--;
         }
-        while(nBest--) {
+        let pos = 0;
+        while(pos < nBest) {
             for (let i = 0; i < numCopies; ++i) {
-                pop.push(this.pop[(this.popSize - 1) - nBest]);
+                pop.push(this.pop[(this.popSize - 1) - pos++]);
             }
         }
     }
@@ -1194,8 +1205,17 @@ document.addEventListener('keyup', key => {
         case "KeyS":
             controller.saveState("custom", true);
             break;
+        case "KeyR":
+            if (!key.shiftKey && !key.altKey && !key.ctrlKey) {
+                if (confirm("Are you sure you want to reset the state?")) {
+                    controller = new Controller();
+                    initialFlag = false;
+                }
+            }
+            break;
         case "KeyP":
             controller.Idle = !controller.Idle;
+            break;
         case "KeyL":
             controller.loadState("custom", true);
         default:
