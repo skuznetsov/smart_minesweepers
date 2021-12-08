@@ -55,7 +55,7 @@
                     <td colspan=2><br/><b>HELP:</b></td>
                 </tr>
                 <tr>
-                    <td><b>Key</b></td>
+                    <td><b>Keyboard<br/>Key</b></td>
                     <td><b>Action</b></td>
                 </tr>
                 <tr>
@@ -72,6 +72,14 @@
                 <tr>
                     <td><b>P</b></td>
                     <td>Pause / Unpause</td>
+                </tr>
+                <tr>
+                    <td><b>Up Arrow</b></td>
+                    <td>Increase mines</td>
+                </tr>
+                <tr>
+                    <td><b>Down Arrow</b></td>
+                    <td>Decrease mines</td>
                 </tr>
                 <tr>
                     <td><b>Spacebar</b></td>
@@ -305,7 +313,7 @@ class Vector2D {
 
 class Minesweeper {
 
-    constructor() {
+    constructor(world) {
         this.brain = new NeuralNet();
         this.rotation = Math.random() * Params.TwoPi;
         this.lTrack = 0.16;
@@ -316,6 +324,7 @@ class Minesweeper {
         this.lookAt = new Vector2D();
         //create a random start position
         this.position = new Vector2D( RandInt(0, Params.WindowWidth), RandInt(0, Params.WindowHeight));
+        this.world = world;
     }
 
 	get	Position() {
@@ -369,12 +378,12 @@ class Minesweeper {
     //	and acceleration and apply to current velocity vector.
     //
     //-----------------------------------------------------------------------
-    Update(mines) {
+    Update() {
         //this will store all the inputs for the NN
         let inputs = [];	
 
         //get vector to closest mine
-        let deltaVector = this.GetClosestMine(mines);
+        let deltaVector = this.GetClosestMine();
 
         //normalise it
         deltaVector.Normalize();
@@ -447,21 +456,21 @@ class Minesweeper {
     //	returns the vector from the sweeper to the closest mine
     //
     //-----------------------------------------------------------------------
-    GetClosestMine(mines) {
+    GetClosestMine() {
         let closestSoFar = 9999999;
         let vClosestObject = new Vector2D();
 
-        if (this.closestMine > -1 && Vector2D.Substract(this.position, mines[this.closestMine]).SquaredLength < Params.MineSenseDistance) {
-            vClosestObject = Vector2D.Substract(this.position, mines[this.closestMine]);
+        if (this.closestMine > -1 && this.closestMine < this.world.mines.length && Vector2D.Substract(this.position, this.world.mines[this.closestMine]).SquaredLength < Params.MineSenseDistance) {
+            vClosestObject = Vector2D.Substract(this.position, this.world.mines[this.closestMine]);
         } else {
             //cycle through mines to find closest
-            for (let i = 0; i < mines.length; i++)
+            for (let i = 0; i < this.world.mines.length; i++)
             {
-                let distanceToObject = Vector2D.Substract(mines[i], this.position).SquaredLength;
+                let distanceToObject = Vector2D.Substract(this.world.mines[i], this.position).SquaredLength;
                 if (distanceToObject < closestSoFar)
                 {
                     closestSoFar = distanceToObject;
-                    vClosestObject	= Vector2D.Substract(this.position, mines[i]);
+                    vClosestObject	= Vector2D.Substract(this.position, this.world.mines[i]);
                     this.closestMine = i;
                 }
             }
@@ -474,10 +483,13 @@ class Minesweeper {
     //  this function checks for collision with its closest mine (calculated
     //  earlier and stored in m_iClosestMine)
     //-----------------------------------------------------------------------
-    CheckForMine(mines, size) {
-        let distToObject = Vector2D.Substract(this.position, mines[this.closestMine]);
+    CheckForMine() {
+        if (this.closestMine < 0 && this.closestMine >= this.world.mines.length) {
+            return -1;
+        }
+        let distToObject = Vector2D.Substract(this.position, this.world.mines[this.closestMine]);
             
-        if (distToObject.SquaredLength < (size + Params.MineSenseRadius))
+        if (distToObject.SquaredLength < (Params.MineScale + Params.MineSenseRadius))
         {
                 return this.closestMine;
         }
@@ -510,7 +522,7 @@ class Controller {
         //let's create the mine sweepers
         for (let i=0; i<this.numSweepers; ++i)
         {
-            this.sweepers.push(new Minesweeper());
+            this.sweepers.push(new Minesweeper(this));
         }
 
         //get the total number of weights used in the sweepers
@@ -532,7 +544,7 @@ class Controller {
 
         //initialize mines in random positions within the application window
         for (let i = 0; i < this.numMines; ++i) {
-            this.mines.push(new Vector2D(RandInt(0, this.xClient), RandInt(0, this.yClient)));
+            this.createNewMine();
         }
     }
 
@@ -548,7 +560,7 @@ class Controller {
     }
 
     saveState(name, showAlert) {
-        let copy = JSON.parse(JSON.stringify(this));
+        let copy = JSON.parse(JSON.stringify(this, (k, v) => k == 'world' ? undefined : v));
         for(let sweeper of copy.sweepers) {
             delete sweeper.brain.layers;
         }
@@ -590,7 +602,7 @@ class Controller {
                 this.sweepers = [];
                 for (let i=0; i<this.numSweepers; ++i)
                 {
-                    this.sweepers.push(new Minesweeper());
+                    this.sweepers.push(new Minesweeper(this));
                     Object.assign(this.sweepers[i],data.sweepers[i]);
                     
                     let brain = new NeuralNet();
@@ -613,9 +625,9 @@ class Controller {
                     this.sweepers[i].Weights = this.thePopulation[i].weights;
                 }
 
-                //initialize mines in random positions within the application window
+                // Respore the mines positions from the loaded data
                 this.mines = [];
-                for (let i = 0; i < this.numMines; ++i)
+                for (let i = 0; i < data.mines.length; ++i)
                 {
                     this.mines.push(new Vector2D(data.mines[i].x,data.mines[i].y));
                 }
@@ -623,6 +635,25 @@ class Controller {
         }
         if (showAlert) {
             alert("Custom state is loaded");
+        }
+    }
+
+    increaseMines() {
+        this.createNewMine();
+    }
+
+    decreaseMines() {
+        if (this.mines.length > 1) {
+            this.mines.length--;
+        }
+    }
+
+    createNewMine(idx) {
+        let mineCoords = new Vector2D(RandInt(0, this.xClient), RandInt(0, this.yClient));
+        if (idx !== undefined && idx >= 0 && idx < this.mines.length) {
+            this.mines[idx] = mineCoords;
+        } else {
+            this.mines.push(mineCoords);
         }
     }
 
@@ -642,78 +673,89 @@ class Controller {
     //
     //	The comments should explain what is going on adequately.
     //-------------------------------------------------------------------------
+    updateMineSweepers() {
+        for (let i = 0; i < this.numSweepers; ++i)
+        {
+            // Update the NN and position of the minesweeper
+            if (!this.sweepers[i].Update())
+            {
+                // Error in processing the neural net
+                // TODO: Should we use Alert here?
+                console.log("Wrong amount of NN inputs!");
+                return false;
+            }
+                
+            // Lets see if mine was found
+            let grabHit = this.sweepers[i].CheckForMine();
+
+            if (grabHit >= 0 && grabHit < this.mines.length)
+            {
+                // We have discovered a mine so increase fitness
+                this.sweepers[i].IncrementFitness();
+
+                // All other minesweepers are less lucky so we reset their targets
+                for (let sweeper of this.sweepers) {
+                    if(sweeper.closestMine == grabHit) {
+                        sweeper.closestMine = -1;
+                    }
+                }
+
+                // Mine was found so replace the mine with another at a random 
+                // position
+                this.createNewMine(grabHit);
+            }
+
+            // Uupdate the chromos fitness score
+            this.thePopulation[i].fitness = this.sweepers[i].Fitness;
+        }
+    }
+
+    UpdateGeneration() {
+        // Update the stats to be used in our stat window
+        this.avFitness.push(this.GA.AverageFitness());
+        this.bestFitness.push(this.GA.BestFitness());
+
+        // Increment the generation counter
+        ++this.generations;
+
+        //r Rset cycles
+        this.ticks = 0;
+
+        // Run the GA to create a new population
+        this.thePopulation = this.GA.Epoch(this.thePopulation);
+            
+        // Insert the new (and hopefully) improved brains back into the sweepers
+        // and reset their positions etc
+        for (let i = 0; i < this.numSweepers; ++i) {
+            if (!this.sweepers[i] || !this.thePopulation[i]) {
+                continue;
+            }
+            this.sweepers[i].Weights = this.thePopulation[i].weights;
+            this.sweepers[i].Reset();
+        }
+        controller.saveState("default");
+        this.Idle = true;
+    }
+
     Update()
     {
-        //run the sweepers through Params.NumTicks amount of cycles. During
-        //this loop each sweepers NN is constantly updated with the appropriate
-        //information from its surroundings. The output from the NN is obtained
-        //and the sweeper is moved. If it encounters a mine its fitness is
-        //updated appropriately,
+        // Run the sweepers through Params.NumTicks amount of cycles.
+        // During this loop each sweepers NN is constantly updated with the appropriate
+        // information from its surroundings.
+        // The output from the NN is obtained and the sweeper is moved.
+        // If it encounters a mine its fitness is updated appropriately,
         this.Idle = false;
+        
         if (this.ticks++ < Params.NumTicks)
         {
-            for (let i = 0; i < this.numSweepers; ++i)
-            {
-                //update the NN and position
-                if (!this.sweepers[i].Update(this.mines))
-                {
-                    //error in processing the neural net
-                    // TODO: Should we use Alert here?
-                    console.log("Wrong amount of NN inputs!");
-                    return false;
-                }
-                    
-                //see if it's found a mine
-                let grabHit = this.sweepers[i].CheckForMine(this.mines, Params.MineScale);
-
-                if (grabHit >= 0)
-                {
-                    //we have discovered a mine so increase fitness
-                    this.sweepers[i].IncrementFitness();
-                    for (let sweeper of this.sweepers) {
-                        if(sweeper.closestMine == grabHit) {
-                            sweeper.closestMine = -1;
-                        }
-                    }
-                    
-
-                    //mine found so replace the mine with another at a random 
-                    //position
-                    this.mines[grabHit] = new Vector2D(RandInt(0, Params.WindowWidth), 
-                                                       RandInt(0, Params.WindowHeight));
-                }
-
-                //update the chromos fitness score
-                this.thePopulation[i].fitness = this.sweepers[i].Fitness;
-            }
+            this.updateMineSweepers();
         }
-        //Another generation has been completed.
-        //Time to run the GA and update the sweepers with their new NNs
+
+        // Another generation has been completed.
+        // Time to run the GA and update the sweepers with their new NNs
         else
         {
-            //update the stats to be used in our stat window
-            this.avFitness.push(this.GA.AverageFitness());
-            this.bestFitness.push(this.GA.BestFitness());
-
-            //increment the generation counter
-            ++this.generations;
-
-            //reset cycles
-            this.ticks = 0;
-
-            //run the GA to create a new population
-            this.thePopulation = this.GA.Epoch(this.thePopulation);
-                
-            //insert the new (hopefully)improved brains back into the sweepers
-            //and reset their positions etc
-            for (let i = 0; i < this.numSweepers; ++i) {
-                if (!this.sweepers[i] || !this.thePopulation[i]) {
-                    continue;
-                }
-                this.sweepers[i].Weights = this.thePopulation[i].weights;
-                this.sweepers[i].Reset();
-            }
-            controller.saveState("default");
+            this.UpdateGeneration();
         }
 
         return true;
@@ -724,73 +766,18 @@ class Controller {
     //----------------------------------------------------------------------------------
     FastUpdate()
     {
-        //run the sweepers through CParams::iNumTicks amount of cycles. During
-        //this loop each sweepers NN is constantly updated with the appropriate
-        //information from its surroundings. The output from the NN is obtained
-        //and the sweeper is moved. If it encounters a mine its fitness is
-        //updated appropriately,
+        // In fast update we are simulating all ticks at once without any render
+        // so it speeds up the simulation
         this.Idle = false;
         while (this.ticks++ < Params.NumTicks)
         {
-            if (!controller.fastRender) {
-                return true;
-            }
-
-            for (let i = 0; i < this.numSweepers; ++i)
-            {
-                //update the NN and position
-                if (!this.sweepers[i].Update(this.mines))
-                {
-                    //error in processing the neural net
-                    // TODO: Should we use Alert here?
-                    console.log("Wrong amount of NN inputs!");
-                    return false;
-                }
-                    
-                //see if it's found a mine
-                let grabHit = this.sweepers[i].CheckForMine(this.mines, Params.MineScale);
-
-                if (grabHit >= 0)
-                {
-                    //we have discovered a mine so increase fitness
-                    this.sweepers[i].IncrementFitness();
-                    this.sweepers[i].closestMine = -1;
-
-                    //mine found so replace the mine with another at a random 
-                    //position
-                    this.mines[grabHit] = new Vector2D(RandInt(0, Params.WindowWidth), 
-                                                       RandInt(0, Params.WindowHeight));
-                }
-
-                //update the chromos fitness score
-                this.thePopulation[i].fitness = this.sweepers[i].Fitness;
-            }
-        }
-        //update the stats to be used in our stat window
-        this.avFitness.push(this.GA.AverageFitness());
-        this.bestFitness.push(this.GA.BestFitness());
-
-        //increment the generation counter
-        ++this.generations;
-
-        //reset cycles
-        this.ticks = 0;
-
-        //run the GA to create a new population
-        this.thePopulation = this.GA.Epoch(this.thePopulation);
-            
-        //insert the new (hopefully) improved brains back into the sweepers
-        //and reset their positions etc
-        for (let i = 0; i < this.numSweepers; ++i) {
-            if (!this.sweepers[i] || !this.thePopulation[i]) {
-                continue;
-            }
-            this.sweepers[i].Weights = this.thePopulation[i].weights;
-            this.sweepers[i].Reset();
+            this.updateMineSweepers();
         }
 
+        this.UpdateGeneration();
         this.PlotStats();
-        controller.saveState("default");
+        this.Idle = true;
+
         return true;
     }
 
@@ -842,7 +829,7 @@ class Controller {
     Render() {
         let ctx = this.renderContext;
         ctx.clearRect(0,0, this.canvas.width, this.canvas.height);
-        this.DrawText('generation', `Generation: ${this.generations}, Best fitness: ${this.CurrentBestFitness()}, Done: ${this.PercentDone}, <b>Spacebar</b> - to switch to fast mode (stats)`); //render the stats
+        this.DrawText('generation', `Generation: ${this.generations}, Best fitness: ${this.CurrentBestFitness()}, Done: ${this.PercentDone}, Press <b>Spacebar</b> - to switch to fast mode (stats)`); //render the stats
         //do not render if running at accelerated speed
         if (!this.fastRender) {
             for (let mine of this.mines) { //render the mines
@@ -873,8 +860,6 @@ class Controller {
                     ctx.stroke();
                 }
             }
-        } else {
-            this.PlotStats();
         }
         this.Idle = true;
     }
@@ -887,7 +872,7 @@ class Controller {
         let ctx = this.renderContext;
         let totalBestFitness = Math.max(...this.bestFitness);
         totalBestFitness = isFinite(totalBestFitness) ? totalBestFitness : 0;
-        this.DrawText('generation', `Generation: ${this.generations}, Current Best fitness: ${this.CurrentBestFitness()}, Best Ever Fitness: ${this.GA.bestEverFitness}, Total Average Fitness: ${this.GA.AverageFitness()}`);
+        this.DrawText('generation', `Generation: ${this.generations}, Best Ever Fitness: ${this.GA.bestEverFitness}, Total Average Fitness: ${this.GA.AverageFitness()}`);
         
         //render the graph
         let HSlice = Params.WindowWidth / (this.generations);
@@ -1291,7 +1276,6 @@ function main() {
     controller.displayAIInfo();
     if (controller.fastRender) {
         controller.FastUpdate();
-        controller.Render();
     } else {
         if (controller.Idle) {
             controller.Update();
@@ -1304,13 +1288,19 @@ function main() {
 document.addEventListener('keyup', key => {
     switch (key.code) {
         case "Space":
+            // Spacebar is switching between fast (stats) and visual modes
             controller.fastRender = !controller.fastRender;
             controller.DisplayState('info', controller.fastRender);
             break;
         case "KeyS":
+            // Here we can save the custom state that can be later loaded with L key
+            // and it will override the default state that is saved after each generation
+
             controller.saveState("custom", true);
             break;
         case "KeyR":
+            // If you hit the R key it will reset the default state to initial values
+
             if (!key.shiftKey && !key.altKey && !key.ctrlKey) {
                 if (confirm("Are you sure you want to reset the state?")) {
                     controller = new Controller();
@@ -1319,10 +1309,21 @@ document.addEventListener('keyup', key => {
             }
             break;
         case "KeyP":
+            // Calculations can be paused if needed 
+
             controller.Idle = !controller.Idle;
             break;
         case "KeyL":
+            // Loading custom state that was initially saved if you hit the S key
+            
             controller.loadState("custom", true);
+            break;
+        case "ArrowUp":
+            controller.increaseMines();
+            break;
+        case "ArrowDown":
+            controller.decreaseMines();
+            break;
         default:
             break;
     }
