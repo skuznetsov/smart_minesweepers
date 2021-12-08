@@ -89,27 +89,25 @@
         </div>
 <script>
 class Params {
-    static get HalfPi() { return Math.PI / 2; }
-    static get TwoPi() { return Math.PI * 2; }
-    static get WindowWidth() { return 1400; }
-    static get WindowHeight() { return 640; }
-    static get NumInputs() { return 6; }
-    static get NumOutputs() { return 2; }
-    static get ActivationResponse() { return 1; }
-    static get Bias() { return 0; }
-
-    static get MaxTurnRate() { return 0.13; }
-    static get MaxForwardSpeed() { return 1.75; }
-    static get MaxBackwardSpeed() { return -1.25; }
-    static get SweeperScale() { return 5; }
-    static get MineScale() { return 2; }
+    static get FastRender() {return true; }
+    static get NumMines() { return 30; }
+    static get NumSweepers() { return 50; }
 
     static get NumHidden() { return 3; }
     static get NeuronsPerHiddenLayer() { return 40; }
     static get NumTicks() { return 5000; }
 
-    static get NumMines() { return 30; }
-    static get NumSweepers() { return 50; }
+    static get MaxTurnRate() { return 0.13; }
+    static get MaxForwardSpeed() { return 1.75; }
+    static get MaxBackwardSpeed() { return -1.25; }
+    static get SweeperScale() { return 2; }
+    static get MineScale() { return 3; }
+
+    static get NumInputs() { return 6; }
+    static get NumOutputs() { return 2; }
+    static get ActivationResponse() { return 1; }
+    static get Bias() { return 0; }
+
     static get MineSenseDistance() { return Math.pow(350, 2); }
     static get MineSenseRadius() { return Math.pow(15, 2); }
 
@@ -118,32 +116,33 @@ class Params {
     static get MaxPerturbation() { return 0.37; }
     static get NumElite() { return (~~(Params.NumSweepers * 0.2) & 0xFE); }
     static get NumCopiesElite() { return 1; }
+
+    static get HalfPi() { return Math.PI / 2; }
+    static get TwoPi() { return Math.PI * 2; }
+    static get WindowWidth() { return 1400; }
+    static get WindowHeight() { return 640; }
+
 }
 
 function SPoint(x, y) {
     return {x, y};
 }
 const SweeperImageDots = [
-    SPoint(-1, -1),
-    SPoint(-1, 1),
-    SPoint(-0.5, 1),
-    SPoint(-0.5, -1),
+    SPoint(-5, -5),
+    SPoint(-5, 3),
+    SPoint(-3, 3),
+    SPoint(-3, 4),
+    SPoint(-2, 5),
+    SPoint(2, 5),
+    SPoint(3, 4),
+    SPoint(3, 3),
+    SPoint(5, 3),
+    SPoint(5, -5),
+    SPoint(3, -5),
+    SPoint(3, -3),
+    SPoint(-3, -3),
+    SPoint(-3, -5)
 
-    SPoint(0.5, -1),
-    SPoint(1, -1),
-    SPoint(1, 1),
-    SPoint(0.5, 1),
-    
-    SPoint(-0.5, -0.5),
-    SPoint(0.5, -0.5),
-
-    SPoint(-0.5, 0.5),
-    SPoint(-0.25, 0.5),
-    SPoint(-0.25, 1.75),
-    SPoint(0.25, 1.75),
-    SPoint(0.25, 0.5),
-    SPoint(0.5, 0.5),
-    SPoint(-1, -1)
 ];
 
 const MineImageDots = [
@@ -319,7 +318,6 @@ class Minesweeper {
         this.lTrack = 0.16;
         this.rTrack = 0.16;
         this.fitness = 0;
-        this.scale = Params.SweeperScale;
         this.closestMine = -1;
         this.lookAt = new Vector2D();
         //create a random start position
@@ -503,7 +501,7 @@ class Controller {
         this.Idle = true;
         this.numSweepers = Params.NumSweepers;
         this.GA = null;
-        this.fastRender = true;
+        this.fastRender = Params.FastRender;
         this.ticks = 0;
         this.numMines = Params.NumMines;
         this.wndMain = null;
@@ -800,24 +798,27 @@ class Controller {
 
     DrawObject(type, obj, color, fitness) {
         let ctx = this.renderContext;
-        let scale = type == 'mine' ? Params.MineScale : obj.scale;
+        let scale = type == 'mine' ? Params.MineScale : Params.SweeperScale;
         let pos = type == 'mine' ? obj : obj.position;
         let x = ~~pos.x,
             y = ~~pos.y;
         let tmpl = type == 'mine' ? MineImageDots : SweeperImageDots;
         ctx.save()
-        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
         ctx.beginPath();
         ctx.translate(x, y)
         ctx.scale(scale, scale);
         if(obj.rotation) {
             ctx.rotate(obj.rotation);
         }
-        for(let pt of tmpl) {
+
+        ctx.moveTo(tmpl[0].x,tmpl[0].y);
+        for(let idx = 1; idx < tmpl.length; idx++) {
+            let pt = tmpl[idx];
             ctx.lineTo(pt.x,pt.y);
         }
         ctx.closePath();
-        ctx.stroke();
+        ctx.fill();
         ctx.restore();
         if (type != "mine") {
             ctx.font = "20px Arial";
@@ -851,13 +852,15 @@ class Controller {
                     ctx.arc(sweeper.position.x, sweeper.position.y, 15, 0, 2 * Math.PI);
                     ctx.stroke();
                 }
-                ctx.strokeStyle = 'green';
                 if (sweeper.closestMine > -1) {
                     let mine = this.mines[sweeper.closestMine];
+                    ctx.strokeStyle = 'green';
+                    ctx.setLineDash([1,2]); // drawing a dotted line
                     ctx.beginPath();
                     ctx.moveTo(~~sweeper.position.x, ~~sweeper.position.y);
                     ctx.lineTo(~~mine.x, ~~mine.y);
                     ctx.stroke();
+                    ctx.setLineDash([]); // resetting a style to the solid line.
                 }
             }
         }
