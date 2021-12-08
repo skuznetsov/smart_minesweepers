@@ -1,8 +1,84 @@
 <html>
-<head><title>Smart sweepers in JS</title></head>
+<head>
+    <title>Smart sweepers in JS</title>
+    <style>
+        #info {
+            border: 1px dotted black;
+            border-radius: 5px;
+            display: block;
+            position: fixed;
+            padding: 15px;
+            top: 30px;
+            left: 10px;
+            background-color:cornsilk;
+        }
+        #info > div {
+            padding: 0;
+        }
+
+        #info > div > p {
+            margin: 0;
+            padding-bottom: 3px;
+        }
+    </style>
+</head>
 <body>
         <div id='generation'></div>
         <canvas id="battlefield" width="0" height="0"></canvas>
+        <div id="info">
+            <table>
+                <tr>
+                    <td>Hidden layers:</td>
+                    <td><span id="hiddenLayers"></span></td>
+                </tr>
+                <tr>
+                    <td>Neurons per hidden layer:</td>
+                    <td><span id="neuronsPerHiddenLayer"></span></td>
+                </tr>
+                <tr>
+                    <td>Population:</td>
+                    <td><span id="popSize"></span></td>
+                </tr>
+                <tr>
+                    <td>Mines:</td>
+                    <td><span id="minesCount"></span></td>
+                </tr>
+                <tr>
+                    <td>Mutation Rate:</td>
+                    <td><span id="mutationRate"></span></td>
+                </tr>
+                <tr>
+                    <td>Crossover Rate:</td>
+                    <td><span id="crossoverRate"></span></td>
+                </tr>
+                <tr>
+                    <td colspan=2><br/><b>HELP:</b></td>
+                </tr>
+                <tr>
+                    <td><b>Key</b></td>
+                    <td><b>Action</b></td>
+                </tr>
+                <tr>
+                    <td><b>S</b></td>
+                    <td>Save custom state</td>
+                </tr>
+                <tr><td><b>L</b></td>
+                    <td>Load custom state</td>
+                </tr>
+                <tr>
+                    <td><b>R</b></td>
+                    <td>Reset to initial state</td>
+                </tr>
+                <tr>
+                    <td><b>P</b></td>
+                    <td>Pause / Unpause</td>
+                </tr>
+                <tr>
+                    <td><b>Spacebar</b></td>
+                    <td>Switch between fast mode (stats)<br/>and visual mode (movements)</td>
+                </tr>
+            </table>
+        </div>
 <script>
 class Params {
     static get HalfPi() { return Math.PI / 2; }
@@ -21,7 +97,7 @@ class Params {
     static get MineScale() { return 2; }
 
     static get NumHidden() { return 3; }
-    static get NeuronsPerHiddenLayer() { return 30; }
+    static get NeuronsPerHiddenLayer() { return 40; }
     static get NumTicks() { return 5000; }
 
     static get NumMines() { return 30; }
@@ -30,8 +106,8 @@ class Params {
     static get MineSenseRadius() { return Math.pow(15, 2); }
 
     static get CrossoverRate() { return 0.7; }
-    static get MutationRate() { return 0.01; }
-    static get MaxPerturbation() { return 0.9; }
+    static get MutationRate() { return 0.13; }
+    static get MaxPerturbation() { return 0.37; }
     static get NumElite() { return (~~(Params.NumSweepers * 0.2) & 0xFE); }
     static get NumCopiesElite() { return 1; }
 }
@@ -415,7 +491,7 @@ class Controller {
         this.Idle = true;
         this.numSweepers = Params.NumSweepers;
         this.GA = null;
-        this.fastRender = false;
+        this.fastRender = true;
         this.ticks = 0;
         this.numMines = Params.NumMines;
         this.wndMain = null;
@@ -460,6 +536,17 @@ class Controller {
         }
     }
 
+    displayAIInfo() {
+        let brain = this.sweepers[0].brain;
+        let ga = this.GA;
+        this.DrawText("hiddenLayers", brain.numHiddenLayers)
+        this.DrawText("neuronsPerHiddenLayer", brain.neuronsPerHiddenLayer);
+        this.DrawText("popSize", ga.popSize);
+        this.DrawText("minesCount", this.mines.length);
+        this.DrawText("mutationRate", ga.mutationRate);
+        this.DrawText("crossoverRate", ga.crossoverRate);
+    }
+
     saveState(name, showAlert) {
         let copy = JSON.parse(JSON.stringify(this));
         for(let sweeper of copy.sweepers) {
@@ -480,9 +567,10 @@ class Controller {
         let json = localStorage.getItem(name);
         if (json) {
             let data = JSON.parse(json);
+            let firstSweeper = data.sweepers[0];
             if (data.sweepers && data.sweepers.length > 0 && 
-                data.sweepers[0].brain.neuronsPerHiddenLayer == Params.NeuronsPerHiddenLayer &&
-                data.sweepers[0].brain.numHiddenLayers == Params.NumHidden) {
+                firstSweeper.brain.neuronsPerHiddenLayer == Params.NeuronsPerHiddenLayer &&
+                firstSweeper.brain.numHiddenLayers == Params.NumHidden) {
                 Object.assign(this, data);
                 this.Idle = true;
                 this.GA = new GenAlg(0);
@@ -495,6 +583,8 @@ class Controller {
                 this.thePopulation = pop;
                 this.GA.pop = pop;
                 this.GA.bestEverGenome = new Genome(data.GA.bestEverGenome.weights, data.GA.bestEverGenome.fitness);
+
+                this.displayAIInfo(firstSweeper, this.GA);
 
                 //let's restore the mine sweepers
                 this.sweepers = [];
@@ -554,7 +644,7 @@ class Controller {
     //-------------------------------------------------------------------------
     Update()
     {
-        //run the sweepers through CParams::iNumTicks amount of cycles. During
+        //run the sweepers through Params.NumTicks amount of cycles. During
         //this loop each sweepers NN is constantly updated with the appropriate
         //information from its surroundings. The output from the NN is obtained
         //and the sweeper is moved. If it encounters a mine its fitness is
@@ -714,6 +804,13 @@ class Controller {
         }
     }
 
+    DisplayState(id, isShown) {
+        let el = document.getElementById(id);
+        if (el){
+            el.style.display = isShown ? "block" : "none";
+        }
+    }
+
     DrawObject(type, obj, color, fitness) {
         let ctx = this.renderContext;
         let scale = type == 'mine' ? Params.MineScale : obj.scale;
@@ -745,7 +842,7 @@ class Controller {
     Render() {
         let ctx = this.renderContext;
         ctx.clearRect(0,0, this.canvas.width, this.canvas.height);
-        this.DrawText('generation', `Generation: ${this.generations}, Best fitness: ${this.CurrentBestFitness()}, Done: ${this.PercentDone}`); //render the stats
+        this.DrawText('generation', `Generation: ${this.generations}, Best fitness: ${this.CurrentBestFitness()}, Done: ${this.PercentDone}, <b>Spacebar</b> - to switch to fast mode (stats)`); //render the stats
         //do not render if running at accelerated speed
         if (!this.fastRender) {
             for (let mine of this.mines) { //render the mines
@@ -761,6 +858,12 @@ class Controller {
                     color = 'blue';
                 }
                 this.DrawObject('sweeper', sweeper, color, sweeper.Fitness);
+                if (i == 0) {
+                    ctx.strokeStyle = 'purple';
+                    ctx.beginPath();
+                    ctx.arc(sweeper.position.x, sweeper.position.y, 15, 0, 2 * Math.PI);
+                    ctx.stroke();
+                }
                 ctx.strokeStyle = 'green';
                 if (sweeper.closestMine > -1) {
                     let mine = this.mines[sweeper.closestMine];
@@ -784,7 +887,7 @@ class Controller {
         let ctx = this.renderContext;
         let totalBestFitness = Math.max(...this.bestFitness);
         totalBestFitness = isFinite(totalBestFitness) ? totalBestFitness : 0;
-        this.DrawText('generation', `Generation: ${this.generations}, Current Best fitness: ${this.CurrentBestFitness()}, Done: ${this.PercentDone}, Total Best Fitness: ${totalBestFitness}, Best Ever Fitness: ${this.GA.bestEverFitness}, Total Average Fitness: ${this.GA.AverageFitness()}`);
+        this.DrawText('generation', `Generation: ${this.generations}, Current Best fitness: ${this.CurrentBestFitness()}, Best Ever Fitness: ${this.GA.bestEverFitness}, Total Average Fitness: ${this.GA.AverageFitness()}`);
         
         //render the graph
         let HSlice = Params.WindowWidth / (this.generations);
@@ -1185,6 +1288,7 @@ function main() {
         initialFlag = false;
     }
 
+    controller.displayAIInfo();
     if (controller.fastRender) {
         controller.FastUpdate();
         controller.Render();
@@ -1201,6 +1305,7 @@ document.addEventListener('keyup', key => {
     switch (key.code) {
         case "Space":
             controller.fastRender = !controller.fastRender;
+            controller.DisplayState('info', controller.fastRender);
             break;
         case "KeyS":
             controller.saveState("custom", true);
