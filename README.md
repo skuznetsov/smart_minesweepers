@@ -1,6 +1,6 @@
 # smart_minesweepers
-JavaScript port of ai-junkie.com evolutionary (genetic) neural network algorithm with extra improvements.
+JavaScript implementeation of evolutionary (genetic) neural network algorithm with extra improvements.
 
-JS port also uses relative normalised positions to the mines as well as normalised distance.
+JS port also uses relative normalized positions to the mines and normalized distance.
 
-All tweakable parameters at this moment are stored at the top of the script but later on the configuration page will be added.
+At this moment, all tweakable parameters are stored at the top of the script, but the configuration page will be added later.
